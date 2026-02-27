@@ -68,8 +68,15 @@ func handleDNS(w dns.ResponseWriter, r *dns.Msg) {
 		return
 	}
 
-	// Store in cache
-	ttl := time.Duration(resp.Answer[0].Header().Ttl) * time.Second
+	var ttl time.Duration
+	if len(resp.Answer) > 0 {
+		ttl = time.Duration(resp.Answer[0].Header().Ttl) * time.Second
+	} else if resp.Rcode == dns.RcodeNameError {
+		ttl = 60 * time.Second
+	} else {
+		ttl = 30 * time.Second
+	}
+
 	cache.Lock()
 	cache.data[cacheKey] = cacheEntry{
 		msg:      resp,
