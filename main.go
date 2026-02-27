@@ -26,7 +26,7 @@ type cacheEntry struct {
 
 const (
 	dohURL      = "https://cloudflare-dns.com/dns-query"
-	socksServer = "127.0.0.1:10808" // your SOCKS5
+	socksServer = "127.0.0.1:10808"
 )
 
 func main() {
@@ -43,6 +43,8 @@ func main() {
 
 func handleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	q := r.Question[0]
+	log.Printf("Received query: %s %s from %s", q.Name, dns.TypeToString[q.Qtype], w.RemoteAddr())
+
 	cacheKey := q.Name + ":" + dns.TypeToString[q.Qtype]
 
 	// Check cache
@@ -51,14 +53,18 @@ func handleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	cache.RUnlock()
 
 	if found && time.Now().Before(entry.expireAt) {
-		w.WriteMsg(entry.msg)
+		log.Printf("Cache HIT for %s", cacheKey)
+		entryPrim := entry.msg.Copy()
+		entryPrim.Id = r.Id
+		w.WriteMsg(entryPrim)
 		return
 	}
+	log.Printf("Cache MISS for %s, querying DoH upstream", cacheKey)
 
 	// Cache miss → resolve via DoH
 	resp, err := resolveDoH(r)
 	if err != nil {
-		log.Println("Resolve error:", err)
+		log.Printf("DoH resolve error for %s: %v", cacheKey, err)
 		return
 	}
 
@@ -70,6 +76,7 @@ func handleDNS(w dns.ResponseWriter, r *dns.Msg) {
 		expireAt: time.Now().Add(ttl),
 	}
 	cache.Unlock()
+	log.Printf("Stored %s in cache with TTL %s", cacheKey, ttl)
 
 	w.WriteMsg(resp)
 }
