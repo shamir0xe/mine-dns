@@ -1,0 +1,14 @@
+doh-resolver: "https://cloudflare-dns.com/dns-query"
+socks-server: "127.0.0.1:1088"
+blackhole-ip: 10.10.10.10
+dns-server:
+  addr: ":53"
+  net: udp
+blacklist:
+  - google.com
+http:
+  timeout: 10s
+cache:
+  cleanup-interval: 5m
+  default-ttl: 3h
+  min-ttl: 5m
