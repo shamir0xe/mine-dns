@@ -17,3 +17,8 @@ cache:
   cleanup-interval: 5m
   default-ttl: 3h
   min-ttl: 5m
+whitelist-subnets:
+  - "127.0.0.1/32"
+  - "192.168.1.0/24"
+  - "10.8.0.1/16"
+  - "10.9.0.1/16"
