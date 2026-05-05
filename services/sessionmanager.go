@@ -16,8 +16,11 @@ func NewSessionManager(rs *Resolver) *SessionManager {
 }
 
 func (sm *SessionManager) NewSession() *Session {
-	session := NewSession(sm.resolver)
 	sm.mu.Lock()
+	session := NewSession(sm.resolver)
+	for sm.sessions[session.ID] != nil {
+		session = NewSession(sm.resolver)
+	}
 	sm.sessions[session.ID] = session
 	sm.mu.Unlock()
 	return session
