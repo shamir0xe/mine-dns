@@ -2,6 +2,7 @@ package dependencies
 
 import (
 	"log"
+	"os"
 	"sync/atomic"
 )
 
@@ -17,6 +18,17 @@ var sessionColors = []string{
 
 const colorReset = "\033[0m"
 
+// colorEnabled is true only when stderr is an interactive terminal.
+// When running under systemd, stderr is a pipe to journald — not a TTY —
+// so we skip ANSI codes to avoid literal escape sequences in journal entries.
+var colorEnabled = func() bool {
+	info, err := os.Stderr.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
+}()
+
 type SessionLogger struct {
 	color string
 }
@@ -27,9 +39,17 @@ func NewSessionLogger() *SessionLogger {
 }
 
 func (l *SessionLogger) Printf(format string, args ...any) {
-	log.Printf(l.color+format+colorReset, args...)
+	if colorEnabled {
+		log.Printf(l.color+format+colorReset, args...)
+	} else {
+		log.Printf(format, args...)
+	}
 }
 
 func (l *SessionLogger) Println(msg string) {
-	log.Println(l.color + msg + colorReset)
+	if colorEnabled {
+		log.Println(l.color + msg + colorReset)
+	} else {
+		log.Println(msg)
+	}
 }
