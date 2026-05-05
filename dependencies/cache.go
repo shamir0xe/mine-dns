@@ -31,19 +31,19 @@ func NewCache[T any](ctx context.Context, cfg *viper.Viper) *CacheStruct[T] {
 	return cache
 }
 
-func (c *CacheStruct[T]) Get(key string) (*T, bool) {
+func (c *CacheStruct[T]) Get(key string, logger *SessionLogger) (*T, bool) {
 	c.RLock()
 	entry, found := c.data[key]
 	c.RUnlock()
 	if found && time.Now().Before(entry.expireAt) {
-		log.Printf("Cache hit for key: %s", key)
+		logger.Printf("Cache hit for key: %s", key)
 		return entry.value, true
 	}
-	log.Printf("Cache miss for key: %s", key)
+	logger.Printf("Cache miss for key: %s", key)
 	return nil, false
 }
 
-func (c *CacheStruct[T]) Set(key string, value *T, ttl time.Duration) {
+func (c *CacheStruct[T]) Set(key string, value *T, ttl time.Duration, logger *SessionLogger) {
 	if ttl < c.minTTL {
 		ttl = c.minTTL
 	}
@@ -53,7 +53,7 @@ func (c *CacheStruct[T]) Set(key string, value *T, ttl time.Duration) {
 		expireAt: time.Now().Add(ttl),
 	}
 	c.Unlock()
-	log.Printf("Set %s in cache with TTL %s", key, ttl)
+	logger.Printf("Set %s in cache with TTL %s", key, ttl)
 }
 
 func (c *CacheStruct[T]) cleanup(ctx context.Context) {

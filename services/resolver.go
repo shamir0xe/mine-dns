@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"shamir0xe/mine-dns/dependencies"
@@ -78,11 +77,13 @@ func (rs *Resolver) matchDirectDomain(name string) bool {
 }
 
 func (rs *Resolver) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
+	logger := dependencies.NewSessionLogger()
+
 	q := r.Question[0]
-	log.Printf("Received query: %s %s from %s", q.Name, dns.TypeToString[q.Qtype], w.RemoteAddr())
+	logger.Printf("Received query: %s %s from %s", q.Name, dns.TypeToString[q.Qtype], w.RemoteAddr())
 
 	if rs.checkBlacklist(q.Name) {
-		log.Printf("Redirecting %s → %s", q.Name, rs.blackholeIP)
+		logger.Printf("Redirecting %s → %s", q.Name, rs.blackholeIP)
 		resp := new(dns.Msg)
 		resp.SetReply(r)
 		resp.Authoritative = true
@@ -109,7 +110,7 @@ func (rs *Resolver) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 				AAAA: net.ParseIP("::ffff:10.10.10.10"),
 			})
 		default:
-			log.Printf("Non-A query for blacklisted domain %s, returning empty answer", q.Name)
+			logger.Printf("Non-A query for blacklisted domain %s, returning empty answer", q.Name)
 		}
 
 		w.WriteMsg(resp)
@@ -117,7 +118,7 @@ func (rs *Resolver) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	}
 
 	cacheKey := q.Name + ":" + dns.TypeToString[q.Qtype]
-	msg, found := rs.cache.Get(cacheKey)
+	msg, found := rs.cache.Get(cacheKey, logger)
 
 	if found {
 		msgPrim := msg.Copy()
@@ -132,24 +133,23 @@ func (rs *Resolver) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	)
 
 	if rs.matchDirectDomain(q.Name) {
-		log.Printf("Resolving %s directly via direct-dns-servers", q.Name)
-		resp, err = rs.resolveDirect(r)
+		logger.Printf("Resolving %s directly via direct-dns-servers", q.Name)
+		resp, err = rs.resolveDirect(r, logger)
 	} else {
 		resp, err = rs.resolveDoH(r)
 	}
 
 	if err != nil {
-		log.Printf("Resolve error for %s: %v", cacheKey, err)
+		logger.Printf("Resolve error for %s: %v", cacheKey, err)
 		return
 	}
 
-	var ttl time.Duration = rs.defaultTTL
-	rs.cache.Set(cacheKey, resp, ttl)
+	rs.cache.Set(cacheKey, resp, rs.defaultTTL, logger)
 
 	w.WriteMsg(resp)
 }
 
-func (rs *Resolver) resolveDirect(query *dns.Msg) (*dns.Msg, error) {
+func (rs *Resolver) resolveDirect(query *dns.Msg, logger *dependencies.SessionLogger) (*dns.Msg, error) {
 	client := &dns.Client{Timeout: rs.httpTimeout}
 	for _, server := range rs.directDNSServers {
 		addr := server
@@ -158,7 +158,7 @@ func (rs *Resolver) resolveDirect(query *dns.Msg) (*dns.Msg, error) {
 		}
 		resp, _, err := client.Exchange(query, addr)
 		if err != nil {
-			log.Printf("Direct DNS server %s failed: %v", server, err)
+			logger.Printf("Direct DNS server %s failed: %v", server, err)
 			continue
 		}
 		return resp, nil
