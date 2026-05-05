@@ -67,7 +67,7 @@ func (rs *Resolver) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 					Name:   q.Name,
 					Rrtype: dns.TypeA,
 					Class:  dns.ClassINET,
-					Ttl:    uint32(rs.defaultTTL),
+					Ttl:    uint32(rs.defaultTTL.Seconds()),
 				},
 				A: net.ParseIP(rs.blackholeIP).To4(),
 			})
@@ -77,7 +77,7 @@ func (rs *Resolver) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 					Name:   q.Name,
 					Rrtype: dns.TypeAAAA,
 					Class:  dns.ClassINET,
-					Ttl:    uint32(rs.defaultTTL),
+					Ttl:    uint32(rs.defaultTTL.Seconds()),
 				},
 				AAAA: net.ParseIP("::ffff:10.10.10.10"),
 			})
