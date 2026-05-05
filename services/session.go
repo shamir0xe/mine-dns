@@ -23,12 +23,14 @@ type Session struct {
 }
 
 func NewSession(rs *Resolver) *Session {
-	return &Session{
+	session := &Session{
 		ID:        utils.GenerateID(),
-		logger:    dependencies.NewSessionLogger(),
 		rs:        rs,
 		startTime: time.Now(),
 	}
+	session.logger = dependencies.NewSessionLogger(session.ID)
+	session.logger.Printf("Session started")
+	return session
 }
 
 func (s *Session) resolveQuery(w dns.ResponseWriter, r *dns.Msg) {

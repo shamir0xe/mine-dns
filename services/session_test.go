@@ -21,7 +21,7 @@ func newTestResolver() *Resolver {
 func newTestSession() *Session {
 	return &Session{
 		ID:        "test",
-		logger:    dependencies.NewSessionLogger(),
+		logger:    dependencies.NewSessionLogger("test"),
 		rs:        newTestResolver(),
 		startTime: time.Now(),
 	}
@@ -62,15 +62,15 @@ func TestCheckBlacklist_SubstringMatch(t *testing.T) {
 func TestMatchDirectDomain(t *testing.T) {
 	s := newTestSession()
 	cases := []struct {
-		name  string
-		want  bool
+		name string
+		want bool
 	}{
 		{"example.ir.", true},
 		{"sub.example.ir.", true},
-		{"IR.", false},           // bare TLD must not match
+		{"IR.", false}, // bare TLD must not match
 		{"example.com.", false},
 		{"notir.org.", false},
-		{"local.test.", true},    // exact match
+		{"local.test.", true},      // exact match
 		{"sub.local.test.", false}, // exact pattern doesn't cover subdomains
 	}
 	for _, c := range cases {
@@ -123,9 +123,9 @@ func TestWhitelistedAddr_InvalidAddr(t *testing.T) {
 func TestSubnetMatch(t *testing.T) {
 	s := newTestSession()
 	cases := []struct {
-		cidr  string
-		ip    string
-		want  bool
+		cidr string
+		ip   string
+		want bool
 	}{
 		{"192.168.1.0/24", "192.168.1.100", true},
 		{"192.168.1.0/24", "192.168.2.1", false},

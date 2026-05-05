@@ -31,18 +31,20 @@ var colorEnabled = func() bool {
 
 type SessionLogger struct {
 	color string
+	id    string
 }
 
-func NewSessionLogger() *SessionLogger {
+func NewSessionLogger(id string) *SessionLogger {
 	idx := sessionCounter.Add(1) - 1
-	return &SessionLogger{color: sessionColors[idx%uint64(len(sessionColors))]}
+	return &SessionLogger{color: sessionColors[idx%uint64(len(sessionColors))], id: id}
 }
 
 func (l *SessionLogger) Printf(format string, args ...any) {
+	args = append([]any{l.id}, args...)
 	if colorEnabled {
-		log.Printf(l.color+format+colorReset, args...)
+		log.Printf(l.color+"[%s] "+format+colorReset, args...)
 	} else {
-		log.Printf(format, args...)
+		log.Printf("[%s] "+format, args...)
 	}
 }
 
