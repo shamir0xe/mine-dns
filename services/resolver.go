@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/base64"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -20,31 +21,57 @@ type ResolverInterface interface {
 }
 
 type Resolver struct {
-	blacklist   []string
-	dohURL      string
-	socksServer string
-	defaultTTL  time.Duration
-	httpTimeout time.Duration
-	blackholeIP string
-	cache       *dependencies.CacheStruct[dns.Msg]
+	blacklist        []string
+	directDomains    []string
+	directDNSServers []string
+	dohURL           string
+	socksServer      string
+	defaultTTL       time.Duration
+	httpTimeout      time.Duration
+	blackholeIP      string
+	cache            *dependencies.CacheStruct[dns.Msg]
 }
 
 func NewResolver(cfg *viper.Viper, cache *dependencies.CacheStruct[dns.Msg]) *Resolver {
 	return &Resolver{
-		blacklist:   cfg.GetStringSlice("blacklist"),
-		dohURL:      cfg.GetString("doh-resolver"),
-		socksServer: cfg.GetString("socks-server"),
-		defaultTTL:  cfg.GetDuration("cache.default-ttl"),
-		httpTimeout: cfg.GetDuration("http.timeout"),
-		blackholeIP: cfg.GetString("blackhole-ip"),
-		cache:       cache,
+		blacklist:        cfg.GetStringSlice("blacklist"),
+		directDomains:    cfg.GetStringSlice("direct-domains"),
+		directDNSServers: cfg.GetStringSlice("direct-dns-servers"),
+		dohURL:           cfg.GetString("doh-resolver"),
+		socksServer:      cfg.GetString("socks-server"),
+		defaultTTL:       cfg.GetDuration("cache.default-ttl"),
+		httpTimeout:      cfg.GetDuration("http.timeout"),
+		blackholeIP:      cfg.GetString("blackhole-ip"),
+		cache:            cache,
 	}
 }
+
 func (rs *Resolver) checkBlacklist(name string) bool {
 	name = strings.ToLower(name)
 	for _, blocked := range rs.blacklist {
 		if strings.Contains(name, blocked) {
 			return true
+		}
+	}
+	return false
+}
+
+// matchDirectDomain checks whether name matches any direct-domains pattern.
+// Patterns may use a leading wildcard (e.g. "*.ir" matches any subdomain of .ir).
+func (rs *Resolver) matchDirectDomain(name string) bool {
+	name = strings.ToLower(name)
+	for _, pattern := range rs.directDomains {
+		pattern = strings.ToLower(pattern)
+		if strings.HasPrefix(pattern, "*.") {
+			// "*.ir" → suffix ".ir." (DNS names carry a trailing dot)
+			suffix := pattern[1:] + "."
+			if strings.HasSuffix(name, suffix) {
+				return true
+			}
+		} else {
+			if name == pattern || name == pattern+"." {
+				return true
+			}
 		}
 	}
 	return false
@@ -99,25 +126,44 @@ func (rs *Resolver) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 		return
 	}
 
-	// Cache miss → resolve via DoH
-	resp, err := rs.resolveDoH(r)
+	var (
+		resp *dns.Msg
+		err  error
+	)
+
+	if rs.matchDirectDomain(q.Name) {
+		log.Printf("Resolving %s directly via direct-dns-servers", q.Name)
+		resp, err = rs.resolveDirect(r)
+	} else {
+		resp, err = rs.resolveDoH(r)
+	}
+
 	if err != nil {
-		log.Printf("DoH resolve error for %s: %v", cacheKey, err)
+		log.Printf("Resolve error for %s: %v", cacheKey, err)
 		return
 	}
 
-	var ttl time.Duration
-	if len(resp.Answer) > 0 {
-		ttl = time.Duration(resp.Answer[0].Header().Ttl) * time.Second
-	} else if resp.Rcode == dns.RcodeNameError {
-		ttl = rs.defaultTTL
-	} else {
-		ttl = rs.defaultTTL
-	}
-
+	var ttl time.Duration = rs.defaultTTL
 	rs.cache.Set(cacheKey, resp, ttl)
 
 	w.WriteMsg(resp)
+}
+
+func (rs *Resolver) resolveDirect(query *dns.Msg) (*dns.Msg, error) {
+	client := &dns.Client{Timeout: rs.httpTimeout}
+	for _, server := range rs.directDNSServers {
+		addr := server
+		if !strings.Contains(addr, ":") {
+			addr += ":53"
+		}
+		resp, _, err := client.Exchange(query, addr)
+		if err != nil {
+			log.Printf("Direct DNS server %s failed: %v", server, err)
+			continue
+		}
+		return resp, nil
+	}
+	return nil, fmt.Errorf("all direct DNS servers failed for %s", query.Question[0].Name)
 }
 
 func (rs *Resolver) resolveDoH(query *dns.Msg) (*dns.Msg, error) {
