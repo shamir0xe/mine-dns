@@ -1,5 +1,7 @@
 # mine-dns
 
+[![Tests](https://github.com/shamir0xe/mine-dns/actions/workflows/test.yml/badge.svg)](https://github.com/shamir0xe/mine-dns/actions/workflows/test.yml)
+
 A local DNS server that forwards queries to Cloudflare DoH (DNS-over-HTTPS) through a SOCKS5 proxy. Supports domain blacklisting, per-domain direct resolution, IP whitelisting, and response caching.
 
 ## How it works
